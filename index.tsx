@@ -74,7 +74,17 @@ const INITIAL_DATA: DaySheet[] = [
 // --- Components ---
 
 const App = () => {
-  const [sheets, setSheets] = useState<DaySheet[]>(INITIAL_DATA);
+  // Initialize state from localStorage if available, otherwise use INITIAL_DATA
+  const [sheets, setSheets] = useState<DaySheet[]>(() => {
+    try {
+      const savedData = localStorage.getItem('vocab_master_sheets');
+      return savedData ? JSON.parse(savedData) : INITIAL_DATA;
+    } catch (e) {
+      console.error("Failed to load data from localStorage:", e);
+      return INITIAL_DATA;
+    }
+  });
+
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -87,6 +97,15 @@ const App = () => {
   // Refs for audio control
   const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingSequenceRef = useRef(false);
+
+  // Persist sheets to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('vocab_master_sheets', JSON.stringify(sheets));
+    } catch (e) {
+      console.error("Failed to save data to localStorage:", e);
+    }
+  }, [sheets]);
 
   // Stats
   const activeSheet = sheets[activeSheetIndex];
