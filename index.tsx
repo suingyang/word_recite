@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { 
@@ -95,7 +94,6 @@ const App = () => {
   const [isPlayingSequence, setIsPlayingSequence] = useState(false);
   
   // Refs for audio control
-  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
   const isPlayingSequenceRef = useRef(false);
 
   // Persist sheets to localStorage whenever they change
@@ -106,6 +104,13 @@ const App = () => {
       console.error("Failed to save data to localStorage:", e);
     }
   }, [sheets]);
+
+  // Cleanup speech synthesis on unmount
+  useEffect(() => {
+    return () => {
+      window.speechSynthesis.cancel();
+    };
+  }, []);
 
   // Stats
   const activeSheet = sheets[activeSheetIndex];
@@ -153,10 +158,9 @@ const App = () => {
 
   // Stop Audio helper
   const stopAudio = () => {
-    if (activeAudioRef.current) {
-      activeAudioRef.current.pause();
-      activeAudioRef.current = null;
-    }
+    // Cancel Web Speech API
+    window.speechSynthesis.cancel();
+    
     setPlayingWordId(null);
     isPlayingSequenceRef.current = false;
     setIsPlayingSequence(false);
@@ -173,33 +177,31 @@ const App = () => {
 
     return new Promise<void>((resolve) => {
       // 1. Construct text to say
+      // Adding a pause logic or punctuation helps the browser speak clearly
       const textToSay = `${wordItem.word}. ${wordItem.replacement || ''}`;
       
-      // 2. Construct Google Translate TTS URL
-      const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=en&q=${encodeURIComponent(textToSay)}`;
-
-      const audio = new Audio(url);
-      activeAudioRef.current = audio;
-
+      // 2. Use Web Speech API
+      const utterance = new SpeechSynthesisUtterance(textToSay);
+      utterance.lang = 'en-US'; // Set language to English
+      utterance.rate = 0.85; // Slightly slower speed for better clarity
+      
       // Handle playback end
-      audio.onended = () => {
+      utterance.onend = () => {
         setPlayingWordId((currentId) => currentId === wordItem.id ? null : currentId);
         resolve();
       };
 
-      // Handle errors (e.g., network issues)
-      audio.onerror = (e) => {
-        console.error("Audio playback error", e);
+      // Handle errors
+      utterance.onerror = (e) => {
+        console.error("Speech synthesis error", e);
         setPlayingWordId((currentId) => currentId === wordItem.id ? null : currentId);
-        resolve(); // Resolve anyway to keep sequence moving if in a playlist
+        resolve(); // Resolve anyway to keep sequence moving
       };
 
       // Start playback
-      audio.play().catch(err => {
-        console.error("Play failed", err);
-        setPlayingWordId(null);
-        resolve();
-      });
+      // Note: We don't strictly need to cancel inside the loop (sequence) because we await the previous one,
+      // but for manual clicks we did call stopAudio() above.
+      window.speechSynthesis.speak(utterance);
     });
   };
 
@@ -228,7 +230,7 @@ const App = () => {
 
       // Small pause between words for natural flow
       if (isPlayingSequenceRef.current) {
-        await new Promise(r => setTimeout(r, 1000));
+        await new Promise(r => setTimeout(r, 800));
       }
     }
 
